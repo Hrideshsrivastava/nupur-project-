@@ -7,11 +7,11 @@
 #include "metro/Types.h"
 
 #include <cstddef>
-#include <optional>
 #include <string>
 #include <vector>
 
-namespace metro::ui {
+namespace metro {
+namespace ui {
 
 enum class Align { Left, Right, Center };
 
@@ -75,14 +75,15 @@ void info(const std::string& message);
 void spinner(const std::string& message, int durationMs);
 
 // ── Input ───────────────────────────────────────────────────────────────────
-/// Line input with a styled prompt. nullopt on end-of-input.
-std::optional<std::string> prompt(const std::string& label);
+/// Line input with a styled prompt. Stores the trimmed text in `out`.
+/// Returns false when there is no more input (end of file).
+bool prompt(const std::string& label, std::string& out);
 void pressEnter();
 
 struct MenuItem {
     std::string label;
     std::string hint;
-    RGB color = palette::accent;
+    RGB color;
 };
 /// Arrow-key menu (numbered list when not interactive).
 /// Returns the chosen index, or -1 when the user backs out.
@@ -107,4 +108,5 @@ private:
     std::vector<std::vector<std::string>> rows_;
 };
 
-} // namespace metro::ui
+} // namespace ui
+} // namespace metro

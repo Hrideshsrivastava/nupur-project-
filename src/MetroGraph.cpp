@@ -58,7 +58,9 @@ void MetroGraph::addWalkTransfer(const std::string& a, const std::string& b, dou
 
 void MetroGraph::buildLine(int line, const std::vector<std::pair<std::string, double>>& stops) {
     int previous = -1;
-    for (const auto& [name, kmFromPrevious] : stops) {
+    for (const auto& stop : stops) {
+        const std::string& name = stop.first;
+        const double kmFromPrevious = stop.second;
         const int id = addStation(name);
         auto& served = stations_[static_cast<std::size_t>(id)].lines;
         if (std::find(served.begin(), served.end(), line) == served.end()) served.push_back(line);
@@ -71,14 +73,14 @@ void MetroGraph::buildLine(int line, const std::vector<std::pair<std::string, do
 void MetroGraph::setFootfall(const std::string& name, int footfall) {
     const int id = findStation(name);
     if (id < 0) throw std::invalid_argument("setFootfall: unknown station " + name);
-    stations_[static_cast<std::size_t>(id)].footfall = std::clamp(footfall, 1, 10);
+    stations_[static_cast<std::size_t>(id)].footfall = clampValue(footfall, 1, 10);
 }
 
 void MetroGraph::finalizeFootfall() {
     for (Station& s : stations_) {
         if (s.footfall > 0) continue;
         int value = 3 + 2 * (static_cast<int>(s.lines.size()) - 1) + (s.hasWalkLink ? 1 : 0);
-        s.footfall = std::clamp(value, 1, 10);
+        s.footfall = clampValue(value, 1, 10);
     }
 }
 

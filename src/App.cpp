@@ -204,26 +204,26 @@ int MetroApp::resolveStation(const std::string& text, std::string* suggestion) c
     return -1;
 }
 
-std::optional<int> MetroApp::askStation(const std::string& label, int exclude) {
+int MetroApp::askStation(const std::string& label, int exclude) {
     return term::interactive() ? askStationInteractive(label, exclude) : askStationPlain(label, exclude);
 }
 
-std::optional<int> MetroApp::askStationPlain(const std::string& label, int exclude) {
+int MetroApp::askStationPlain(const std::string& label, int exclude) {
     while (true) {
-        auto in = ui::prompt(label);
-        if (!in || in->empty()) return std::nullopt;
+        std::string in;
+        if (!ui::prompt(label, in) || in.empty()) return -1;
         std::string hint;
-        const int id = resolveStation(*in, &hint);
+        const int id = resolveStation(in, &hint);
         if (id >= 0 && id != exclude) {
             ui::success(paint(graph_.station(id).name, pal::gold, true) + "  " + renderer_.stationChips(id));
             return id;
         }
         if (id == exclude && id >= 0) ui::error("Pick a different station from the origin.");
-        else ui::error("No station named \"" + *in + "\"" + (hint.empty() ? "." : " — did you mean " + hint + "?"));
+        else ui::error("No station named \"" + in + "\"" + (hint.empty() ? "." : " — did you mean " + hint + "?"));
     }
 }
 
-std::optional<int> MetroApp::askStationInteractive(const std::string& label, int exclude) {
+int MetroApp::askStationInteractive(const std::string& label, int exclude) {
     constexpr std::size_t kShown = 6;
     std::string input;
     std::size_t selected = 0;
@@ -268,7 +268,7 @@ std::optional<int> MetroApp::askStationInteractive(const std::string& label, int
 
     term::hideCursor();
     std::size_t height = render();
-    std::optional<int> result;
+    int result = -1; // -1 = cancelled
     bool done = false;
     while (!done) {
         const int key = term::readKey();
@@ -308,9 +308,9 @@ std::optional<int> MetroApp::askStationInteractive(const std::string& label, int
 
     // Collapse the widget into a single confirmation line.
     std::vector<std::string> final(height, "");
-    final[0] = promptText + (result ? paint(graph_.station(*result).name, pal::gold, true) + "  " +
-                                          renderer_.stationChips(*result)
-                                    : muted("cancelled"));
+    final[0] = promptText + (result >= 0 ? paint(graph_.station(result).name, pal::gold, true) + "  " +
+                                               renderer_.stationChips(result)
+                                         : muted("cancelled"));
     ui::drawBlock(final);
     std::cout << "\n" << std::flush;
     std::cout << "\x1b[J" << std::flush; // clear the now-empty suggestion area
@@ -318,7 +318,7 @@ std::optional<int> MetroApp::askStationInteractive(const std::string& label, int
     return result;
 }
 
-std::optional<int> MetroApp::askDeparture() {
+int MetroApp::askDeparture() {
     const int now = currentMinute();
     const std::vector<ui::MenuItem> items = {
         {"Leave now", str::formatClock(now), pal::accent},
@@ -337,25 +337,26 @@ std::optional<int> MetroApp::askDeparture() {
         case 4: return 22 * 60 + 30;
         case 5:
             while (true) {
-                auto in = ui::prompt("Departure time (HH:MM):");
-                if (!in || in->empty()) return std::nullopt;
+                std::string in;
+                if (!ui::prompt("Departure time (HH:MM):", in) || in.empty()) return -1;
                 int minute = 0;
-                if (str::parseClock(*in, minute)) return minute;
+                if (str::parseClock(in, minute)) return minute;
                 ui::error("Invalid time — try something like 08:45 or 1730.");
             }
-        default: return std::nullopt;
+        default: return -1;
     }
 }
 
-std::optional<Preference> MetroApp::askPreference() {
+bool MetroApp::askPreference(Preference& chosen) {
     const Preference prefs[] = {Preference::Balanced, Preference::Hurry, Preference::Budget,
                                 Preference::Comfort, Preference::Simple};
     const RGB colors[] = {pal::gold, pal::accent, pal::success, pal::warning, pal::accent2};
     std::vector<ui::MenuItem> items;
     for (int i = 0; i < 5; ++i) items.push_back({preferenceName(prefs[i]), preferenceTagline(prefs[i]), colors[i]});
     const int choice = ui::menu("WHAT MATTERS MOST TO YOU?", items);
-    if (choice < 0) return std::nullopt;
-    return prefs[choice];
+    if (choice < 0) return false;
+    chosen = prefs[choice];
+    return true;
 }
 
 // ─── Screens ────────────────────────────────────────────────────────────────
@@ -363,24 +364,24 @@ std::optional<Preference> MetroApp::askPreference() {
 void MetroApp::planJourney() {
     ui::heading("PLAN A JOURNEY", "intelligent multi-criteria recommendation");
     std::cout << "\n";
-    const auto src = askStation("From:");
-    if (!src) return;
-    const auto dst = askStation("To:  ", *src);
-    if (!dst) return;
-    const auto depart = askDeparture();
-    if (!depart) return;
-    const auto pref = askPreference();
-    if (!pref) return;
+    const int src = askStation("From:");
+    if (src < 0) return;
+    const int dst = askStation("To:  ", src);
+    if (dst < 0) return;
+    const int depart = askDeparture();
+    if (depart < 0) return;
+    Preference pref = Preference::Balanced;
+    if (!askPreference(pref)) return;
 
-    const JourneyContext ctx{*depart, settings_.day};
+    const JourneyContext ctx{depart, settings_.day};
     ui::spinner("Running Dijkstra ×5, BFS and alternative-route search…", 900);
-    const Recommendation rec = recommender_.recommend(*src, *dst, ctx, *pref);
+    const Recommendation rec = recommender_.recommend(src, dst, ctx, pref);
     if (rec.options.empty()) {
         ui::error("No route exists between these stations.");
         return;
     }
-    showRecommendation(rec, ctx, *pref);
-    record(rec.options.front().route, preferenceName(*pref));
+    showRecommendation(rec, ctx, pref);
+    record(rec.options.front().route, preferenceName(pref));
     afterJourney(rec, ctx);
 }
 
@@ -441,31 +442,31 @@ void MetroApp::routeByCriterion() {
     if (choice < 0) return;
     const Criterion criterion = all[choice];
 
-    const auto src = askStation("From:");
-    if (!src) return;
-    const auto dst = askStation("To:  ", *src);
-    if (!dst) return;
-    const auto depart = askDeparture();
-    if (!depart) return;
+    const int src = askStation("From:");
+    if (src < 0) return;
+    const int dst = askStation("To:  ", src);
+    if (dst < 0) return;
+    const int depart = askDeparture();
+    if (depart < 0) return;
 
-    const JourneyContext ctx{*depart, settings_.day};
+    const JourneyContext ctx{depart, settings_.day};
     ui::spinner(std::string("Searching with ") + criterionAlgorithm(criterion) + "…", 600);
-    const auto route = finder_.find(*src, *dst, criterion, ctx);
-    if (!route) {
+    const Route route = finder_.find(src, dst, criterion, ctx);
+    if (route.empty()) {
         ui::error("No route exists between these stations.");
         return;
     }
-    renderer_.journeyCard(*route, std::string(criterionName(criterion)) + " ROUTE", ctx, {});
+    renderer_.journeyCard(route, std::string(criterionName(criterion)) + " ROUTE", ctx, {});
     std::cout << "  " << muted("Algorithm: ") << strong(criterionAlgorithm(criterion)) << muted("  ·  states settled: ")
               << paint(std::to_string(finder_.lastExplored()), pal::success, true) << "\n";
-    renderer_.timeline(*route, ctx);
-    record(*route, criterionName(criterion));
+    renderer_.timeline(route, ctx);
+    record(route, criterionName(criterion));
 
     const std::vector<ui::MenuItem> next = {{"Export HTML ticket", "save this route as a web page", pal::success},
                                             {"Back to main menu", "", pal::muted}};
     if (ui::menu("WHAT NEXT?", next) == 0) {
-        const std::string path = suggestedTicketName(*route, graph_);
-        if (exportJourneyHtml(*route, graph_, ctx, path)) ui::success("Ticket saved to " + paint(path, pal::gold, true));
+        const std::string path = suggestedTicketName(route, graph_);
+        if (exportJourneyHtml(route, graph_, ctx, path)) ui::success("Ticket saved to " + paint(path, pal::gold, true));
         else ui::error("Could not write " + path);
     }
 }
@@ -473,11 +474,11 @@ void MetroApp::routeByCriterion() {
 void MetroApp::stationExplorer() {
     ui::heading("STATION EXPLORER", "type any part of a name — powered by a Trie");
     std::cout << "\n";
-    const auto id = askStation("Station:");
-    if (!id) return;
+    const int id = askStation("Station:");
+    if (id < 0) return;
     const JourneyContext ctx{currentMinute(), settings_.day};
-    renderer_.stationCard(*id, ctx);
-    renderer_.crowdForecast(*id, ctx);
+    renderer_.stationCard(id, ctx);
+    renderer_.crowdForecast(id, ctx);
 }
 
 void MetroApp::linesExplorer() {
@@ -492,9 +493,9 @@ void MetroApp::linesExplorer() {
 }
 
 void MetroApp::crowdHeatmap() {
-    const auto depart = askDeparture();
-    if (!depart) return;
-    renderer_.heatmap(JourneyContext{*depart, settings_.day}, 15);
+    const int depart = askDeparture();
+    if (depart < 0) return;
+    renderer_.heatmap(JourneyContext{depart, settings_.day}, 15);
 }
 
 void MetroApp::showHistory() {

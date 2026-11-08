@@ -7,7 +7,8 @@
 #include <string>
 #include <vector>
 
-namespace metro::str {
+namespace metro {
+namespace str {
 
 std::string toLower(std::string s);
 std::string trim(const std::string& s);
@@ -35,4 +36,5 @@ bool parseClock(const std::string& text, int& minuteOfDay);
 /// Fixed-point number formatting, e.g. fixed(3.14159, 1) -> "3.1".
 std::string fixed(double value, int precision);
 
-} // namespace metro::str
+} // namespace str
+} // namespace metro

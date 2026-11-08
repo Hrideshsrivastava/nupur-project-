@@ -376,7 +376,7 @@ void Renderer::stationCard(int station, const JourneyContext& ctx) const {
     for (int l : s.lines) served += lineChip(l) + " " + paint(graph_.line(l).name, graph_.line(l).color, true) + "   ";
     lines.push_back(served);
 
-    const int stars = std::clamp((s.footfall + 1) / 2, 1, 5);
+    const int stars = clampValue((s.footfall + 1) / 2, 1, 5);
     lines.push_back(muted("Footfall   ") + paint(repeat("★", static_cast<std::size_t>(stars)), pal::gold) +
                     paint(repeat("☆", static_cast<std::size_t>(5 - stars)), pal::border) +
                     muted("  (" + std::to_string(s.footfall) + "/10 popularity)"));
@@ -422,7 +422,7 @@ void Renderer::crowdForecast(int station, const JourneyContext& ctx) const {
         std::cout << "  " << muted(axis) << " " << paint(row == 0 ? "┼" : "┤", pal::border);
         for (int h = 0; h < 24; ++h) {
             const double v = values[static_cast<std::size_t>(h)] / 100.0 * height;
-            const double fill = std::clamp(v - row, 0.0, 1.0);
+            const double fill = clampValue(v - row, 0.0, 1.0);
             const int eighths = static_cast<int>(std::lround(fill * 8));
             const RGB c = ui::crowdColor(values[static_cast<std::size_t>(h)]);
             const std::string cell = std::string(lower[eighths]) + lower[eighths];

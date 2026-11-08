@@ -1,6 +1,6 @@
 # Simple Makefile for systems without CMake.  Usage: make && ./build/metro_navigator
 CXX      ?= g++
-CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Wpedantic
+CXXFLAGS ?= -std=c++14 -O2 -Wall -Wextra -Wpedantic
 INCLUDES := -Iinclude
 BUILD    := build
 

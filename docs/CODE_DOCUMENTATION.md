@@ -2,6 +2,8 @@
 
 This document explains the whole codebase **file by file and function by function**. It starts with the big picture: the architecture, how data flows, and the key algorithmic ideas. After that comes a reference for every component.
 
+> **Language.** The project is written in **C++14** and deliberately avoids newer syntax: there is no `std::optional`, no structured bindings (`auto [a, b]`) and no `std::clamp`. Functions that may "find nothing" return a sentinel instead: `-1` for an id or a time, `false` for a `bool` function, or an **empty `Route`** (check with `route.empty()`).
+>
 > **Conventions.** All code lives in the `metro` namespace. Headers are in `include/metro/` and implementations in `src/`. Station ids and line indices are plain `int`s that index into vectors. `-1` means "none / not found", and as a *line* index it means "walking transfer". Times are in **minutes** and distances in **kilometres**.
 
 ---
@@ -226,7 +228,7 @@ Notation: **V** = stations (245), **E** = connections (261), **L** = lines (12),
 
 | Item | Description |
 |---|---|
-| `struct RGB { r, g, b }` | A 24-bit colour. Every line has one, and the UI builds gradients from it. |
+| `struct RGB { r, g, b }` | A 24-bit colour, created as `RGB{red, green, blue}`. Every line has one, and the UI builds gradients from it. |
 | `kTransferPenaltyMin = 6.0` | Minutes added for each line change (platform walk plus average wait). |
 | `kDwellMin = 0.5` | Halt time added to every edge. |
 | `kMinutesPerDay = 1440` | Used to wrap clock arithmetic. |
@@ -243,6 +245,7 @@ Notation: **V** = stations (245), **E** = connections (261), **L** = lines (12),
 | `preferenceName(Preference)` | Display name, e.g. `"In a hurry"`. |
 | `preferenceTagline(Preference)` | Short explanation shown next to the name in the preference menu. |
 | `dayTypeName(DayType)` | `"Weekday"` or `"Sunday / Holiday"`. |
+| `template T clampValue(T value, T low, T high)` | Limits `value` to the range `[low, high]`. A small replacement for C++17's `std::clamp`, used across the code. |
 
 ---
 
@@ -435,11 +438,11 @@ Internal data: `kWeekdayProfile` and `kSundayProfile`, two arrays of 24 values e
 |---|---|
 | `RouteFinder(graph, crowd)` | Stores references to the graph and the crowd model. |
 | `static uint64_t edgeKey(a, b)` *(private)* | Packs the unordered pair as `min << 32 | max`, so a→b and b→a share one key. |
-| `std::optional<Route> find(source, target, criterion, ctx) const` | Dispatcher: `FewestStops` → `fewestStops`, every other criterion → `dijkstra` (without penalties). |
+| `Route find(source, target, criterion, ctx) const` | Dispatcher: `FewestStops` → `fewestStops`, every other criterion → `dijkstra` (without penalties). Returns an **empty `Route`** when there is no route, so callers check `if (route.empty())`. |
 | `double edgeCost(edge, lineChange, boardingPremium, criterion, stepMinutes, clockMinute, day) const` *(private)* | The **criterion-specific weight** from [§3.3](#33-one-dijkstra-many-criteria). `stepMinutes` already includes any transfer penalty. For *LeastCrowded* it asks `CrowdModel::level` for the next station at `clockMinute`, the actual time you reach it, which makes the weights **time-dependent**. |
-| `std::optional<Route> dijkstra(source, target, criterion, ctx, penalties) const` *(private)* | **Line-aware Dijkstra** ([§3.2](#32-line-aware-dijkstra-the-expanded-state-space)). <br>• It validates the input: an invalid id or `source == target` returns `nullopt`. <br>• It allocates `best`, `parent` and `arrivedOn` arrays over all states. <br>• The frontier is a `MinHeap<Label>` ordered by cost. A `Label` also carries the real elapsed minutes, which the crowd weight needs. <br>• Each pop skips stale labels (*lazy deletion*) and increments `explored_`. The search stops at the first pop of any state at the target, which is optimal. <br>• Relaxation works out whether the edge is a line change or the start of a premium-line ride, computes the step time and the criterion cost, and multiplies by any penalty for that station pair. <br>• Finally it follows `parent` pointers back, reverses the station and line lists, and calls `buildRoute`. |
-| `std::optional<Route> fewestStops(source, target, ctx) const` | **BFS** on stations using a `std::queue`, `seen` and `parent`. The first time the target is dequeued, the path has the fewest hops. It then rebuilds the path, chooses lines with `assignLines`, and calls `buildRoute`. |
-| `std::vector<int> assignLines(path) const` *(private)* | BFS returns only stations, but between two stations several lines (or a walk) may be possible. This **dynamic program** runs over hops. Its state is "last train line ridden", its value is (changes so far, previous state, line chosen), and it keeps the minimum number of changes for each state. Backtracking from the best final state gives one line per hop. |
+| `Route dijkstra(source, target, criterion, ctx, penalties) const` *(private)* | **Line-aware Dijkstra** ([§3.2](#32-line-aware-dijkstra-the-expanded-state-space)). <br>• It validates the input: an invalid id or `source == target` returns an empty `Route`. <br>• It allocates `best`, `parent` and `arrivedOn` arrays over all states. <br>• The frontier is a `MinHeap<Label>` ordered by cost. A `Label` also carries the real elapsed minutes, which the crowd weight needs. <br>• Each pop skips stale labels (*lazy deletion*) and increments `explored_`. The search stops at the first pop of any state at the target, which is optimal. <br>• Relaxation works out whether the edge is a line change or the start of a premium-line ride, computes the step time and the criterion cost, and multiplies by any penalty for that station pair. <br>• Finally it follows `parent` pointers back, reverses the station and line lists, and calls `buildRoute`. |
+| `Route fewestStops(source, target, ctx) const` | **BFS** on stations using a `std::queue`, `seen` and `parent`. The first time the target is dequeued, the path has the fewest hops. It then rebuilds the path, chooses lines with `assignLines`, and calls `buildRoute`. |
+| `std::vector<int> assignLines(path) const` *(private)* | BFS returns only stations, but between two stations several lines (or a walk) may be possible. This **dynamic program** runs over hops. Its state is "last train line ridden", and for each state it keeps a small `Choice` struct (changes so far, previous state, line chosen) with the minimum number of changes. Backtracking from the best final state gives one line per hop. |
 | `std::vector<Route> alternatives(source, target, ctx, count) const` | **Edge-penalty method** ([§3.4](#34-alternatives-by-the-edge-penalty-method)). It finds the fastest route, then repeatedly multiplies the cost of every used station pair by ×1.8 and searches again. A route is kept only if its signature is new and `totalMin ≤ 1.5 × best + 20`. It stops after `count` routes or `4·count` attempts. |
 | `Route buildRoute(stations, hopLines, ctx) const` | **Annotates a raw path**. For each hop it looks up the edge and detects line changes: it adds 6 min and counts an interchange, ignoring walks. It starts a new `Segment` whenever the line changes, and accumulates distance, time, walk time and the arrival time (`etaMin`) of each station. Then it computes the fare with `FareCalculator::compute`, the crowd at each station *at its arrival time*, and the average and peak crowd. |
 | `const MetroGraph& graph() const` | Exposes the graph (the recommender uses it for station names). |
@@ -461,7 +464,7 @@ Internal data: `kWeekdayProfile` and `kSundayProfile`, two arrays of 24 values e
 | `normalise(value, lo, hi)` *(file-local)* | Min-max scaling to 0..1. Returns 0 when every route has the same value. |
 | `Recommender(const RouteFinder&)` | Stores the finder. |
 | `static Weights weightsFor(Preference)` | Balanced (.35/.20/.15/.20/.10), Hurry (time .70), Budget (fare .60), Comfort (crowd .50), Simple (interchanges .60). |
-| `Recommendation recommend(source, target, ctx, preference) const` | The core pipeline, in four phases. <br>**1. Candidates:** runs `find` for all 6 criteria plus `alternatives(…, 2)`, adding up `lastExplored()`. `addCandidate` merges duplicates by `signature()` and combines their `foundBy` lists. <br>**2. Ranges:** works out the min/max of each metric across the candidates. <br>**3. Score and rank:** computes the weighted normalised score and `match %` for each route, and awards badges to every route that ties for best in a metric (`FASTEST`, `DIRECT`/`FEWEST CHANGES`, `CHEAPEST`, `LEAST CROWDED`, `SHORTEST`, `FEWEST STOPS`). The routes are pushed into a `MinHeap` keyed by score, with time as the tie-break, and popped into `options`. <br>**4. Explain:** builds `reasons` for the winner: the quickest option or how many minutes slower it is, direct or fewest changes, lowest fare, least crowded; plus warnings for a peak crowd ≥ 75% at a named station and for travelling in peak hours. It also measures the wall-clock time with `std::chrono::steady_clock`. |
+| `Recommendation recommend(source, target, ctx, preference) const` | The core pipeline, in four phases. <br>**1. Candidates:** runs `find` for all 6 criteria plus `alternatives(…, 2)`, adding up `lastExplored()`. `addCandidate` merges duplicates by `signature()` and combines their `foundBy` lists. <br>**2. Ranges:** `rangeOf` works out the lowest and highest value (`Range{lo, hi}`) of each metric across the candidates. The metrics are small plain functions (`timeOf`, `changesOf`, `fareOf`, `crowdOf`, `distOf`, `stopsOf`) passed in as function pointers. <br>**3. Score and rank:** computes the weighted normalised score and `match %` for each route, and awards badges to every route that ties for best in a metric (`FASTEST`, `DIRECT`/`FEWEST CHANGES`, `CHEAPEST`, `LEAST CROWDED`, `SHORTEST`, `FEWEST STOPS`). The routes are pushed into a `MinHeap` keyed by score, with time as the tie-break, and popped into `options`. <br>**4. Explain:** builds `reasons` for the winner: the quickest option or how many minutes slower it is, direct or fewest changes, lowest fare, least crowded; plus warnings for a peak crowd ≥ 75% at a named station and for travelling in peak hours. It also measures the wall-clock time with `std::chrono::steady_clock`. |
 
 ---
 
@@ -540,7 +543,7 @@ Namespace `metro::ui`. `palette::*` defines the app's colours (accent cyan, viol
 | `rule(color)` | A horizontal line. |
 | `success / warn / error / info(message)` | Status lines with ✔ ▲ ✖ ● icons. |
 | `spinner(message, durationMs)` | An animated braille spinner (`⠋⠙⠹…`) whose colour shifts between accent colours, followed by a clean line clear. It is skipped when animations are off. |
-| `std::optional<std::string> prompt(label)` | A styled prompt read with `std::getline`. Returns the trimmed input, or `nullopt` at **end of input**, which lets piped runs finish cleanly. |
+| `bool prompt(label, std::string& out)` | A styled prompt read with `std::getline`. Stores the trimmed input in `out` and returns `true`, or returns `false` at **end of input**, which lets piped runs finish cleanly. |
 | `pressEnter()` | "Press any key to continue…" (raw single key). Does nothing when not interactive. |
 | `drawBlock(lines)` | **In-place redraw**: prints each line after `\r\x1b[2K` (clear line), then moves the cursor back up to the block's first line. Menus and autocomplete redraw themselves with this on every key press. |
 | `endBlock(lineCount)` | Moves the cursor below a drawn block. |
@@ -605,11 +608,11 @@ Namespace `metro::ui`. `palette::*` defines the app's colours (accent cyan, viol
 | `std::vector<int> fuzzyMatches(text, limit) const` | Scores every station with `fuzzyDistance`, sorts with `mergeSort`, and returns up to `limit` stations within `max(2, len/2)` edits. |
 | `std::vector<int> wordPrefixMatches(text) const` | Stations whose words start with the query's words **in order** (greedy matching), so `"noida sec 62"` → *Noida Sector 62*. |
 | `int resolveStation(text, suggestion*) const` | **Lookup cascade:** (1) exact **hash-map** match; (2) a single **Trie** prefix match; (3) a single word-prefix match; (4) an unambiguous typo: the best fuzzy match has distance ≤ 2, beats the runner-up, and the query is ≥ 4 characters. Otherwise it returns −1 and puts the best guess in `suggestion` for "did you mean …?". |
-| `askStation(label, exclude)` | Uses the interactive widget on a terminal, otherwise the plain prompt. `exclude` stops the destination from being the same as the origin. |
-| `askStationPlain(label, exclude)` | Loops over `ui::prompt` and `resolveStation`, printing a success line with chips or an error with a suggestion. An empty line or EOF cancels. |
-| `askStationInteractive(label, exclude)` | **Live autocomplete widget.** In `RawMode`, every key press updates the input and re-queries the Trie for up to 6 suggestions. If the Trie finds nothing it falls back to word-prefix matches, then (for input of ≥ 3 characters) fuzzy matches. It redraws the block with `drawBlock`: the prompt with a caret, the highlighted suggestion with line chips, and a hint or status line. Keys: ↑/↓ select, Tab completes, Backspace deletes, Enter accepts the highlighted suggestion or an exact match (otherwise it shows an error in the status line), Esc or Ctrl+C cancels. At the end it collapses into a single confirmation line and clears the rest of the block. |
-| `askDeparture()` | A menu: Leave now, Morning peak 09:00, Afternoon 14:00, Evening peak 18:00, Late night 22:30, or Custom (parsed with `parseClock`, and re-asked when invalid). |
-| `askPreference()` | A menu of the 5 preferences with their taglines. |
+| `int askStation(label, exclude)` | Uses the interactive widget on a terminal, otherwise the plain prompt. Returns the station id, or **-1 if the user cancels**. `exclude` stops the destination from being the same as the origin. |
+| `int askStationPlain(label, exclude)` | Loops over `ui::prompt` and `resolveStation`, printing a success line with chips or an error with a suggestion. An empty line or EOF cancels. |
+| `int askStationInteractive(label, exclude)` | **Live autocomplete widget.** In `RawMode`, every key press updates the input and re-queries the Trie for up to 6 suggestions. If the Trie finds nothing it falls back to word-prefix matches, then (for input of ≥ 3 characters) fuzzy matches. It redraws the block with `drawBlock`: the prompt with a caret, the highlighted suggestion with line chips, and a hint or status line. Keys: ↑/↓ select, Tab completes, Backspace deletes, Enter accepts the highlighted suggestion or an exact match (otherwise it shows an error in the status line), Esc or Ctrl+C cancels. At the end it collapses into a single confirmation line and clears the rest of the block. |
+| `int askDeparture()` | A menu: Leave now, Morning peak 09:00, Afternoon 14:00, Evening peak 18:00, Late night 22:30, or Custom (parsed with `parseClock`, and re-asked when invalid). Returns minutes after midnight, or **-1 if cancelled**. |
+| `bool askPreference(Preference& chosen)` | A menu of the 5 preferences with their taglines. Stores the choice in `chosen` and returns `true`, or returns `false` if cancelled. |
 | `planJourney()` | From → To → time → preference → spinner → `recommend` → `showRecommendation` → `record` → `afterJourney`. Any cancelled step returns to the main menu. |
 | `showRecommendation(rec, ctx, pref)` | Journey card (title *YOUR BEST ROUTE* plus a RECOMMENDED badge and the route's other badges), then the reasons, the timeline, the comparison table and a performance line (ms, states, candidates). |
 | `afterJourney(rec, ctx)` | A follow-up menu: view any option (its card and timeline), **export an HTML ticket** of the option currently displayed, or go back. |
@@ -651,7 +654,7 @@ This is a dependency-free micro-framework. The `CHECK(cond)` macro counts checks
 | Cross-network route | Has at least one change, and every hop is a real edge of the graph. |
 | **Optimality** | For Rithala → Noida Electronic City, each criterion's route is at least as good as every other criterion's route *in its own metric* (time, km, changes, stops, fare). |
 | Skywalk | Rajiv Chowk → Pari Chowk includes a walking segment and exactly 1 interchange. |
-| Invalid queries | Same station, negative id and out-of-range id all return `nullopt`. |
+| Invalid queries | Same station, negative id and out-of-range id all return an empty `Route`. |
 | Alternatives | Non-empty and different from the fastest route. |
 | Recommender | Scores are sorted, reasons exist, and *In a hurry* puts a fast route first. |
 | History | Saving and reloading keeps only the newest `capacity` records, in order. |
@@ -662,7 +665,7 @@ This is a dependency-free micro-framework. The `CHECK(cond)` macro counts checks
 
 | File | Description |
 |---|---|
-| `CMakeLists.txt` | Uses C++17 and defaults to a Release build. It sets the warning flags (`/W4 /utf-8` on MSVC; `-Wall -Wextra -Wpedantic` elsewhere). It builds the `metro_core` static library (with `include/` as a public include path), the `metro_navigator` app and the `metro_tests` executable, and registers `add_test(metro_tests)` for `ctest`. |
+| `CMakeLists.txt` | Uses C++14 and defaults to a Release build. It sets the warning flags (`/W4 /utf-8` on MSVC; `-Wall -Wextra -Wpedantic` elsewhere). It builds the `metro_core` static library (with `include/` as a public include path), the `metro_navigator` app and the `metro_tests` executable, and registers `add_test(metro_tests)` for `ctest`. |
 | `Makefile` | For machines without CMake. It compiles each `src/*.cpp` except `main.cpp` into `build/obj/`, links the app and the tests, and provides the `run`, `test` and `clean` targets. |
 | `.gitignore` | Ignores build output, IDE folders, history files and exported tickets. |
 

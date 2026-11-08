@@ -25,10 +25,10 @@ struct MetroLine {
 /// twice (a->b and b->a). `line == -1` marks a walking transfer between two
 /// stations that are joined by a footbridge/skywalk instead of track.
 struct Edge {
-    int to = -1;
-    int line = -1;
-    double distanceKm = 0.0;
-    double timeMin = 0.0;
+    int to;            // neighbouring station id
+    int line;          // line index, or -1 for a walking transfer
+    double distanceKm;
+    double timeMin;
 
     bool isWalk() const { return line < 0; }
 };

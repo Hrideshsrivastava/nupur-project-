@@ -11,7 +11,6 @@
 #include "metro/RouteFinder.h"
 #include "metro/Trie.h"
 
-#include <optional>
 #include <string>
 
 namespace metro {
@@ -44,12 +43,12 @@ private:
     void networkInfo();
     void settingsMenu();
 
-    // Input helpers.
-    std::optional<int> askStation(const std::string& label, int exclude = -1);
-    std::optional<int> askStationInteractive(const std::string& label, int exclude);
-    std::optional<int> askStationPlain(const std::string& label, int exclude);
-    std::optional<int> askDeparture();
-    std::optional<Preference> askPreference();
+    // Input helpers. Each returns -1 (or false) when the user cancels.
+    int askStation(const std::string& label, int exclude = -1);
+    int askStationInteractive(const std::string& label, int exclude);
+    int askStationPlain(const std::string& label, int exclude);
+    int askDeparture();                      // minute of the day
+    bool askPreference(Preference& chosen);
 
     /// Station id for free text: exact hash lookup, then Trie, then edit distance.
     int resolveStation(const std::string& text, std::string* suggestion) const;

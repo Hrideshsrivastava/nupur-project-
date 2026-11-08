@@ -48,7 +48,7 @@ double CrowdModel::level(int station, double minuteOfDay, DayType day) const {
     const unsigned hash = static_cast<unsigned>(station) * 2654435761u + hour * 40503u;
     const double jitter = ((hash % 1000u) / 1000.0 - 0.5) * 8.0;
 
-    return std::clamp(popularity * d * 100.0 + jitter * d, 0.0, 100.0);
+    return clampValue(popularity * d * 100.0 + jitter * d, 0.0, 100.0);
 }
 
 std::vector<double> CrowdModel::forecast(int station, DayType day) const {

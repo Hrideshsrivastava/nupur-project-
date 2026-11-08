@@ -7,7 +7,8 @@
 #include <cmath>
 #include <iostream>
 
-namespace metro::ui {
+namespace metro {
+namespace ui {
 
 namespace {
 
@@ -32,7 +33,7 @@ const char* const kEighths[] = {"", "▏", "▎", "▍", "▌", "▋", "▊", "�
 // Shared bar renderer: `colorAt(i)` gives the colour of cell i.
 template <typename ColorFn>
 std::string bar(double fraction, int width, ColorFn colorAt) {
-    fraction = std::clamp(fraction, 0.0, 1.0);
+    fraction = clampValue(fraction, 0.0, 1.0);
     const double cells = fraction * width;
     const int full = static_cast<int>(cells);
     const int eighths = static_cast<int>(std::lround((cells - full) * 8));
@@ -49,7 +50,7 @@ std::string bar(double fraction, int width, ColorFn colorAt) {
 
 } // namespace
 
-int layoutWidth() { return std::clamp(term::columns() - 4, 64, 104); }
+int layoutWidth() { return clampValue(term::columns() - 4, 64, 104); }
 
 std::size_t visibleWidth(const std::string& s) {
     std::size_t width = 0;
@@ -96,7 +97,7 @@ std::string repeat(const std::string& s, std::size_t n) {
 }
 
 RGB lerp(RGB a, RGB b, double t) {
-    t = std::clamp(t, 0.0, 1.0);
+    t = clampValue(t, 0.0, 1.0);
     auto mix = [t](std::uint8_t x, std::uint8_t y) {
         return static_cast<std::uint8_t>(std::lround(x + (y - x) * t));
     };
@@ -129,7 +130,7 @@ std::string gradient(const std::string& text, RGB from, RGB to, bool isBold) {
 RGB crowdColor(double level) {
     constexpr RGB green{80, 220, 140}, yellow{255, 205, 60}, orange{255, 140, 50},
         red{255, 70, 90};
-    level = std::clamp(level, 0.0, 100.0);
+    level = clampValue(level, 0.0, 100.0);
     if (level < 45) return lerp(green, yellow, level / 45.0);
     if (level < 72) return lerp(yellow, orange, (level - 45) / 27.0);
     return lerp(orange, red, (level - 72) / 28.0);
@@ -205,7 +206,7 @@ void spinner(const std::string& message, int durationMs) {
     term::showCursor();
 }
 
-std::optional<std::string> prompt(const std::string& label) {
+bool prompt(const std::string& label, std::string& out) {
     std::cout << "  " << paint("›", palette::accent, true) << " " << strong(label) << " "
               << term::fg(palette::gold) << std::flush;
     std::string line;
@@ -213,9 +214,11 @@ std::optional<std::string> prompt(const std::string& label) {
     std::cout << term::reset();
     if (!ok) {
         std::cout << "\n";
-        return std::nullopt;
+        out.clear();
+        return false;
     }
-    return str::trim(line);
+    out = str::trim(line);
+    return true;
 }
 
 void pressEnter() {
@@ -256,10 +259,11 @@ int menu(const std::string& title, const std::vector<MenuItem>& items, int initi
             std::cout << "    " << paint(std::to_string(i + 1), items[i].color, true) << "  "
                       << pad(items[i].label, labelWidth) << "  " << muted(items[i].hint) << "\n";
         while (true) {
-            auto in = prompt("Select (1-" + std::to_string(items.size()) + ", 0 = back):");
-            if (!in || *in == "0" || *in == "q") return -1;
+            std::string in;
+            if (!prompt("Select (1-" + std::to_string(items.size()) + ", 0 = back):", in)) return -1;
+            if (in == "0" || in == "q") return -1;
             try {
-                const int v = std::stoi(*in);
+                const int v = std::stoi(in);
                 if (v >= 1 && v <= static_cast<int>(items.size())) return v - 1;
             } catch (...) {
             }
@@ -267,7 +271,7 @@ int menu(const std::string& title, const std::vector<MenuItem>& items, int initi
         }
     }
 
-    int selected = std::clamp(initial, 0, static_cast<int>(items.size()) - 1);
+    int selected = clampValue(initial, 0, static_cast<int>(items.size()) - 1);
     auto build = [&]() {
         std::vector<std::string> lines;
         for (std::size_t i = 0; i < items.size(); ++i) {
@@ -358,4 +362,5 @@ void Table::print(RGB accent) const {
     std::cout << border("╰", "┴", "╯");
 }
 
-} // namespace metro::ui
+} // namespace ui
+} // namespace metro

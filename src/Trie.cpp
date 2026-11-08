@@ -51,10 +51,9 @@ void Trie::collect(const Node* node, std::vector<Entry>& out, std::size_t cap) {
     // Pre-order depth-first traversal; children are visited alphabetically.
     if (out.size() >= cap) return;
     for (const Entry& e : node->entries) out.push_back(e);
-    for (const auto& [ch, child] : node->children) {
-        (void)ch;
+    for (const auto& child : node->children) { // child.first = letter, child.second = node
         if (out.size() >= cap) return;
-        collect(child.get(), out, cap);
+        collect(child.second.get(), out, cap);
     }
 }
 

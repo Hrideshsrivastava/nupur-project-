@@ -14,9 +14,9 @@ struct JourneyRecord {
     std::string from;
     std::string to;
     std::string mode;      // criterion / preference used
-    double minutes = 0.0;
-    int fare = 0;
-    int interchanges = 0;
+    double minutes;
+    int fare;
+    int interchanges;
 };
 
 class JourneyHistory {

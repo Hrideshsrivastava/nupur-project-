@@ -21,7 +21,8 @@
 #include <unistd.h>
 #endif
 
-namespace metro::term {
+namespace metro {
+namespace term {
 
 namespace {
 
@@ -262,4 +263,5 @@ int readKey() {
 
 #endif
 
-} // namespace metro::term
+} // namespace term
+} // namespace metro

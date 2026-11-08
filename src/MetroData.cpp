@@ -1,6 +1,7 @@
 #include "metro/MetroData.h"
 
-namespace metro::data {
+namespace metro {
+namespace data {
 
 MetroGraph buildDelhiMetro() {
     MetroGraph g;
@@ -165,10 +166,11 @@ MetroGraph buildDelhiMetro() {
         {"Mayur Vihar Phase-1", 6}, {"Karkarduma", 6}, {"Kalkaji Mandir", 6},
         {"MG Road", 6},
     };
-    for (const auto& [name, footfall] : hotspots) g.setFootfall(name, footfall);
+    for (const auto& spot : hotspots) g.setFootfall(spot.first, spot.second);
     g.finalizeFootfall();
 
     return g;
 }
 
-} // namespace metro::data
+} // namespace data
+} // namespace metro

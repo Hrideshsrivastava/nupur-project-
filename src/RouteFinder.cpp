@@ -4,11 +4,9 @@
 #include "metro/MinHeap.h"
 
 #include <algorithm>
-#include <climits>
 #include <limits>
 #include <map>
 #include <queue>
-#include <tuple>
 #include <unordered_set>
 
 namespace metro {
@@ -27,8 +25,8 @@ std::uint64_t RouteFinder::edgeKey(int a, int b) {
     return (lo << 32) | hi;
 }
 
-std::optional<Route> RouteFinder::find(int source, int target, Criterion criterion,
-                                       const JourneyContext& ctx) const {
+Route RouteFinder::find(int source, int target, Criterion criterion,
+                        const JourneyContext& ctx) const {
     if (criterion == Criterion::FewestStops) return fewestStops(source, target, ctx);
     return dijkstra(source, target, criterion, ctx, nullptr);
 }
@@ -65,13 +63,12 @@ double RouteFinder::edgeCost(const Edge& edge, bool lineChange, bool boardingPre
     return stepMinutes;
 }
 
-std::optional<Route> RouteFinder::dijkstra(int source, int target, Criterion criterion,
-                                           const JourneyContext& ctx,
-                                           const EdgePenalties* penalties) const {
+Route RouteFinder::dijkstra(int source, int target, Criterion criterion,
+                            const JourneyContext& ctx, const EdgePenalties* penalties) const {
     explored_ = 0;
     const int n = static_cast<int>(graph_.stationCount());
     if (source < 0 || target < 0 || source >= n || target >= n || source == target)
-        return std::nullopt;
+        return Route(); // empty route = "no route"
 
     // State = station * slots + (line + 1); slot 0 means "not on a train yet".
     const int slots = static_cast<int>(graph_.lineCount()) + 1;
@@ -134,7 +131,7 @@ std::optional<Route> RouteFinder::dijkstra(int source, int target, Criterion cri
         }
     }
 
-    if (goal < 0) return std::nullopt;
+    if (goal < 0) return Route();
 
     // Walk the parent pointers back to the source.
     std::vector<int> stations, hopLines;
@@ -150,12 +147,11 @@ std::optional<Route> RouteFinder::dijkstra(int source, int target, Criterion cri
     return route;
 }
 
-std::optional<Route> RouteFinder::fewestStops(int source, int target,
-                                              const JourneyContext& ctx) const {
+Route RouteFinder::fewestStops(int source, int target, const JourneyContext& ctx) const {
     explored_ = 0;
     const int n = static_cast<int>(graph_.stationCount());
     if (source < 0 || target < 0 || source >= n || target >= n || source == target)
-        return std::nullopt;
+        return Route();
 
     // Classic BFS: the first time we dequeue the target we have the fewest hops.
     std::vector<int> parent(static_cast<std::size_t>(n), -1);
@@ -175,7 +171,7 @@ std::optional<Route> RouteFinder::fewestStops(int source, int target,
             q.push(e.to);
         }
     }
-    if (!seen[static_cast<std::size_t>(target)]) return std::nullopt;
+    if (!seen[static_cast<std::size_t>(target)]) return Route();
 
     std::vector<int> path;
     for (int v = target; v != -1; v = parent[static_cast<std::size_t>(v)]) path.push_back(v);
@@ -187,35 +183,44 @@ std::optional<Route> RouteFinder::fewestStops(int source, int target,
 }
 
 std::vector<int> RouteFinder::assignLines(const std::vector<int>& path) const {
-    // Dynamic programming over hops. State = last train line ridden (-1 none).
-    // Value = (line changes so far, previous state, line chosen for this hop).
+    // Dynamic programming over hops. For every hop we keep, per "last train
+    // line ridden" (-1 = none yet), the cheapest way to get there.
+    struct Choice {
+        int changes;  // line changes so far
+        int previous; // "last train line" before this hop
+        int line;     // line used for this hop (-1 = walk)
+    };
     const std::size_t hops = path.empty() ? 0 : path.size() - 1;
-    std::vector<std::map<int, std::tuple<int, int, int>>> layer(hops + 1);
-    layer[0][-1] = {0, INT_MIN, INT_MIN};
+    std::vector<std::map<int, Choice>> layer(hops + 1);
+    layer[0][-1] = Choice{0, -1, -1};
 
     for (std::size_t i = 0; i < hops; ++i) {
-        for (const auto& [lastLine, info] : layer[i]) {
+        for (const auto& entry : layer[i]) {
+            const int lastLine = entry.first;
+            const Choice& info = entry.second;
             for (const Edge& e : graph_.neighbors(path[i])) {
                 if (e.to != path[i + 1]) continue;
                 const int newLast = e.isWalk() ? lastLine : e.line;
-                const int changes =
-                    std::get<0>(info) + ((!e.isWalk() && lastLine >= 0 && e.line != lastLine) ? 1 : 0);
+                const bool change = !e.isWalk() && lastLine >= 0 && e.line != lastLine;
+                const int changes = info.changes + (change ? 1 : 0);
                 auto it = layer[i + 1].find(newLast);
-                if (it == layer[i + 1].end() || changes < std::get<0>(it->second))
-                    layer[i + 1][newLast] = {changes, lastLine, e.line};
+                if (it == layer[i + 1].end() || changes < it->second.changes)
+                    layer[i + 1][newLast] = Choice{changes, lastLine, e.line};
             }
         }
     }
 
     std::vector<int> lines(hops, -1);
     if (hops == 0 || layer[hops].empty()) return lines;
+
+    // Start from the final state with the fewest changes and walk backwards.
     int state = layer[hops].begin()->first;
-    for (const auto& [key, info] : layer[hops])
-        if (std::get<0>(info) < std::get<0>(layer[hops][state])) state = key;
+    for (const auto& entry : layer[hops])
+        if (entry.second.changes < layer[hops][state].changes) state = entry.first;
     for (std::size_t i = hops; i > 0; --i) {
-        const auto& info = layer[i].at(state);
-        lines[i - 1] = std::get<2>(info);
-        state = std::get<1>(info);
+        const Choice& info = layer[i].at(state);
+        lines[i - 1] = info.line;
+        state = info.previous;
     }
     return lines;
 }
@@ -223,29 +228,31 @@ std::vector<int> RouteFinder::assignLines(const std::vector<int>& path) const {
 std::vector<Route> RouteFinder::alternatives(int source, int target, const JourneyContext& ctx,
                                              int count) const {
     std::vector<Route> result;
-    auto base = dijkstra(source, target, Criterion::Fastest, ctx, nullptr);
-    if (!base) return result;
+    const Route base = dijkstra(source, target, Criterion::Fastest, ctx, nullptr);
+    if (base.empty()) return result;
 
     // Penalise the edges of every route found so far and search again: the
     // next search is pushed towards genuinely different corridors.
     EdgePenalties penalties;
-    std::unordered_set<std::string> seen{base->signature()};
+    std::unordered_set<std::string> seen;
+    seen.insert(base.signature());
     auto penalise = [&](const Route& r) {
         for (std::size_t i = 0; i + 1 < r.stations.size(); ++i) {
             double& m = penalties[edgeKey(r.stations[i], r.stations[i + 1])];
             m = (m == 0.0 ? 1.0 : m) * kAlternativePenalty;
         }
     };
-    penalise(*base);
+    penalise(base);
 
     for (int attempt = 0; attempt < count * 4 && static_cast<int>(result.size()) < count; ++attempt) {
-        auto alt = dijkstra(source, target, Criterion::Fastest, ctx, &penalties);
-        if (!alt) break;
-        penalise(*alt);
+        Route alt = dijkstra(source, target, Criterion::Fastest, ctx, &penalties);
+        if (alt.empty()) break;
+        penalise(alt);
         // Keep only distinct routes that are not absurdly slower than the best.
-        if (seen.insert(alt->signature()).second && alt->totalMin <= base->totalMin * 1.5 + 20.0) {
-            alt->foundBy.clear();
-            result.push_back(*alt);
+        const bool isNew = seen.insert(alt.signature()).second;
+        if (isNew && alt.totalMin <= base.totalMin * 1.5 + 20.0) {
+            alt.foundBy.clear();
+            result.push_back(alt);
         }
     }
     return result;

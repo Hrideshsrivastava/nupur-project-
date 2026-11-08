@@ -12,16 +12,16 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <unordered_map>
 #include <vector>
 
 namespace metro {
 
 /// When and on what kind of day the passenger travels.
+/// Create one with JourneyContext{minuteOfDay, DayType::Weekday}.
 struct JourneyContext {
-    int departMinute = 9 * 60;
-    DayType day = DayType::Weekday;
+    int departMinute; // minutes after midnight, e.g. 9 * 60 for 09:00
+    DayType day;
 };
 
 /// Multipliers applied to station-pair edges; used to discover alternatives.
@@ -31,12 +31,12 @@ class RouteFinder {
 public:
     RouteFinder(const MetroGraph& graph, const CrowdModel& crowd);
 
-    /// Best route for one criterion, or nullopt if unreachable / same station.
-    std::optional<Route> find(int source, int target, Criterion criterion,
-                              const JourneyContext& ctx) const;
+    /// Best route for one criterion. Returns an empty Route (route.empty()
+    /// is true) when there is no route or source and target are the same.
+    Route find(int source, int target, Criterion criterion, const JourneyContext& ctx) const;
 
     /// Route with the fewest stations in between (Breadth-First Search).
-    std::optional<Route> fewestStops(int source, int target, const JourneyContext& ctx) const;
+    Route fewestStops(int source, int target, const JourneyContext& ctx) const;
 
     /// Up to `count` alternatives to the fastest route (edge-penalty method).
     std::vector<Route> alternatives(int source, int target, const JourneyContext& ctx,
@@ -52,8 +52,8 @@ public:
     std::size_t lastExplored() const { return explored_; }
 
 private:
-    std::optional<Route> dijkstra(int source, int target, Criterion criterion,
-                                  const JourneyContext& ctx, const EdgePenalties* penalties) const;
+    Route dijkstra(int source, int target, Criterion criterion, const JourneyContext& ctx,
+                   const EdgePenalties* penalties) const;
 
     double edgeCost(const Edge& edge, bool lineChange, bool boardingPremium, Criterion criterion,
                     double stepMinutes, double clockMinute, DayType day) const;

@@ -4,10 +4,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 #include "metro/MetroGraph.h"
 
-namespace metro::data {
+namespace metro {
+namespace data {
 
 /// Builds the network: 12 lines, ~245 stations, interchanges and skywalks.
 /// Inter-station distances are realistic approximations.
 MetroGraph buildDelhiMetro();
 
-} // namespace metro::data
+} // namespace data
+} // namespace metro

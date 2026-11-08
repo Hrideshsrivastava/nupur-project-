@@ -2,13 +2,13 @@
 
 # 🚇 Metro Route Navigation System
 
-### An intelligent, multi-criteria journey planner for the Delhi NCR Metro, written in modern C++17
+### An intelligent, multi-criteria journey planner for the Delhi NCR Metro, written in C++14
 
-![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white)
+![C++14](https://img.shields.io/badge/C%2B%2B-14-00599C?logo=cplusplus&logoColor=white)
 ![CMake](https://img.shields.io/badge/build-CMake%20%7C%20Make-064F8C?logo=cmake&logoColor=white)
 ![Platforms](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-6f42c1)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-2ea44f)
-![Tests](https://img.shields.io/badge/tests-116%20checks%20passing-2ea44f)
+![Tests](https://img.shields.io/badge/tests-121%20checks%20passing-2ea44f)
 
 <img src="docs/screenshots/journey.png" alt="Journey planner output" width="760">
 
@@ -103,7 +103,7 @@ Everything runs in the terminal. The interface uses 24-bit colour, gradients, li
 
 ## 🚀 Running it on your computer
 
-You need **a C++17 compiler** and, optionally, **CMake ≥ 3.14**. Nothing else needs to be installed.
+You need **a C++14 compiler** (GCC 5+, Clang 3.4+ or Visual Studio 2017+) and, optionally, **CMake ≥ 3.14**. Nothing else needs to be installed.
 
 ### 1. Get the code
 
@@ -196,7 +196,7 @@ cmake --build build -j
 **Option C: just g++ (no CMake)**
 
 ```powershell
-g++ -std=c++17 -O2 -Iinclude src/*.cpp -o metro_navigator.exe
+g++ -std=c++14 -O2 -Iinclude src/*.cpp -o metro_navigator.exe
 .\metro_navigator.exe
 ```
 
@@ -209,7 +209,8 @@ The program switches the console to UTF-8 and turns on ANSI colour support by it
 
 * **VS Code:** install the *C/C++* and *CMake Tools* extensions, open the folder, choose a kit, then click **Build** and **▶ Run** in the status bar. Run the app in the integrated terminal.
 * **CLion:** open the folder; it detects `CMakeLists.txt` automatically. Select the `metro_navigator` configuration and press Run. *Tip:* enable **Run → Edit Configurations → Emulate terminal in the output console** so the arrow-key menus work.
-* **Code::Blocks / Dev-C++:** create an empty project, add every file from `src/`, add `include/` to the compiler's search directories, and set the standard to C++17.
+* **Code::Blocks:** create an empty project, add every file from `src/`, and add `include/` under *Project → Build options → Search directories*. Under *Compiler settings → Compiler flags*, tick **"Have g++ follow the C++14 ISO C++ language standard [-std=c++14]"**.
+* **Dev-C++:** create an empty project, add every file from `src/`, add `include/` under *Project Options → Directories → Include Directories*, and add `-std=c++14` under *Tools → Compiler Options → "Add the following commands when calling the compiler"*.
 
 </details>
 
@@ -222,7 +223,7 @@ ctest --test-dir build --output-on-failure   # with CMake
 make test                                     # with the Makefile
 ```
 
-The suite checks every data structure and algorithm, including that each criterion is optimal for its own metric, plus the edge cases and history persistence. It runs **116 checks**.
+The suite checks every data structure and algorithm, including that each criterion is optimal for its own metric, plus the edge cases and history persistence. It runs **121 checks**.
 
 ---
 
@@ -317,7 +318,7 @@ nupur-project-/
 | Colours look wrong or washed out | Your terminal may not report 24-bit colour support. Try `--truecolor`. If the colours get worse, your terminal only supports 256 colours, which the app uses by default. |
 | Arrow keys do nothing in my IDE | Some IDE "run" consoles are not real terminals. Run the program from a terminal, or enable terminal emulation (CLion). The app falls back to typed numeric menus when it is not attached to a terminal. |
 | `cmake: command not found` | Install CMake, or use `make` / the single `g++` command shown above. |
-| `error: ‘optional’ is not a member of ‘std’` | Your compiler defaults to an older standard. Make sure you pass `-std=c++17` (GCC ≥ 8, Clang ≥ 7, MSVC 2019+). |
+| `error: ‘make_unique’ is not a member of ‘std’` (or similar errors) | Your compiler is using an older C++ standard. Pass `-std=c++14` (see the Code::Blocks / Dev-C++ steps above). Very old compilers such as the GCC 4.9 bundled with Dev-C++ 5.11 have not been tested; if the build still fails there, install a newer compiler (MSYS2 or Visual Studio). |
 | I want to reset my history | Delete `metro_history.txt`, or use *Journey History → Clear history*. |
 
 ---

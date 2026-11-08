@@ -79,7 +79,9 @@ int main() {
 
     run("mergeSort sorts and is stable", [] {
         std::vector<std::pair<int, char>> v = {{3, 'a'}, {1, 'b'}, {3, 'c'}, {2, 'd'}, {1, 'e'}};
-        mergeSort(v, [](const auto& a, const auto& b) { return a.first < b.first; });
+        mergeSort(v, [](const std::pair<int, char>& a, const std::pair<int, char>& b) {
+            return a.first < b.first;
+        });
         CHECK((v == std::vector<std::pair<int, char>>{{1, 'b'}, {1, 'e'}, {2, 'd'}, {3, 'a'}, {3, 'c'}}));
     });
 
@@ -98,11 +100,11 @@ int main() {
     run("Trie autocomplete: prefix, mid-word and ranking", [] {
         Trie t;
         for (const Station& s : graph().stations()) t.insert(s.name, s.id);
-        auto r = t.suggest("rajiv", 5);
+        std::vector<int> r = t.suggest("rajiv", 5);
         CHECK(!r.empty() && r.front() == id("Rajiv Chowk"));
-        auto sec = t.suggest("sector 62", 5);
+        std::vector<int> sec = t.suggest("sector 62", 5);
         CHECK(!sec.empty() && sec.front() == id("Noida Sector 62"));
-        auto chowk = t.suggest("chowk", 10);
+        std::vector<int> chowk = t.suggest("chowk", 10);
         CHECK(chowk.size() >= 4); // Rajiv, Chandni, IFFCO, Patel, …
         CHECK(t.suggest("zzzz", 5).empty());
         CHECK(t.contains("Kashmere Gate"));
@@ -135,69 +137,72 @@ int main() {
     });
 
     run("Dijkstra: direct ride on one line has 0 interchanges", [&] {
-        auto r = finder.find(id("Rajiv Chowk"), id("Noida Sector 62"), Criterion::Fastest, ctx);
-        CHECK(r.has_value());
-        CHECK(r && r->interchanges == 0);
-        CHECK(r && r->stations.front() == id("Rajiv Chowk") && r->stations.back() == id("Noida Sector 62"));
-        CHECK(r && r->segments.size() == 1);
+        Route r = finder.find(id("Rajiv Chowk"), id("Noida Sector 62"), Criterion::Fastest, ctx);
+        CHECK(!r.empty());
+        CHECK(r.interchanges == 0);
+        CHECK(!r.empty() && r.stations.front() == id("Rajiv Chowk") && r.stations.back() == id("Noida Sector 62"));
+        CHECK(r.segments.size() == 1);
     });
 
     run("Dijkstra: cross-network route needs a change", [&] {
-        auto r = finder.find(id("Samaypur Badli"), id("Botanical Garden"), Criterion::Fastest, ctx);
-        CHECK(r && r->interchanges >= 1);
-        CHECK(r && r->totalMin > 0 && r->distanceKm > 0);
+        Route r = finder.find(id("Samaypur Badli"), id("Botanical Garden"), Criterion::Fastest, ctx);
+        CHECK(r.interchanges >= 1);
+        CHECK(r.totalMin > 0 && r.distanceKm > 0);
         // Every hop must be a real edge of the graph.
-        for (std::size_t i = 0; r && i + 1 < r->stations.size(); ++i)
-            CHECK(graph().edgeBetween(r->stations[i], r->stations[i + 1], r->hopLines[i]) != nullptr);
+        for (std::size_t i = 0; i + 1 < r.stations.size(); ++i)
+            CHECK(graph().edgeBetween(r.stations[i], r.stations[i + 1], r.hopLines[i]) != nullptr);
     });
 
     run("Each criterion is optimal for its own metric", [&] {
         const int a = id("Rithala"), b = id("Noida Electronic City");
-        auto fastest = finder.find(a, b, Criterion::Fastest, ctx);
-        auto shortest = finder.find(a, b, Criterion::Shortest, ctx);
-        auto fewest = finder.find(a, b, Criterion::LeastInterchange, ctx);
-        auto stops = finder.find(a, b, Criterion::FewestStops, ctx);
-        auto cheap = finder.find(a, b, Criterion::Cheapest, ctx);
-        CHECK(fastest && shortest && fewest && stops && cheap);
-        for (const auto* r : {&shortest, &fewest, &stops, &cheap}) CHECK(fastest->totalMin <= (*r)->totalMin + 1e-9);
-        for (const auto* r : {&fastest, &fewest, &stops, &cheap}) CHECK(shortest->distanceKm <= (*r)->distanceKm + 1e-9);
-        for (const auto* r : {&fastest, &shortest, &stops, &cheap}) CHECK(fewest->interchanges <= (*r)->interchanges);
-        for (const auto* r : {&fastest, &shortest, &fewest, &cheap}) CHECK(stops->stops() <= (*r)->stops());
-        for (const auto* r : {&fastest, &shortest, &fewest, &stops}) CHECK(cheap->fare <= (*r)->fare);
+        const Route fastest = finder.find(a, b, Criterion::Fastest, ctx);
+        const Route shortest = finder.find(a, b, Criterion::Shortest, ctx);
+        const Route fewest = finder.find(a, b, Criterion::LeastInterchange, ctx);
+        const Route stops = finder.find(a, b, Criterion::FewestStops, ctx);
+        const Route cheap = finder.find(a, b, Criterion::Cheapest, ctx);
+        CHECK(!fastest.empty() && !shortest.empty() && !fewest.empty() && !stops.empty() && !cheap.empty());
+        const std::vector<Route> all = {fastest, shortest, fewest, stops, cheap};
+        for (const Route& r : all) {
+            CHECK(fastest.totalMin <= r.totalMin + 1e-9);
+            CHECK(shortest.distanceKm <= r.distanceKm + 1e-9);
+            CHECK(fewest.interchanges <= r.interchanges);
+            CHECK(stops.stops() <= r.stops());
+            CHECK(cheap.fare <= r.fare);
+        }
     });
 
     run("Skywalk transfer to the Aqua Line", [&] {
-        auto r = finder.find(id("Rajiv Chowk"), id("Pari Chowk"), Criterion::Fastest, ctx);
-        CHECK(r.has_value());
+        Route r = finder.find(id("Rajiv Chowk"), id("Pari Chowk"), Criterion::Fastest, ctx);
+        CHECK(!r.empty());
         bool walked = false;
-        for (const Segment& s : r->segments) walked = walked || s.isWalk();
+        for (const Segment& s : r.segments) walked = walked || s.isWalk();
         CHECK(walked);
-        CHECK(r->interchanges == 1);
+        CHECK(r.interchanges == 1);
     });
 
     run("Invalid queries return no route", [&] {
-        CHECK(!finder.find(id("Rajiv Chowk"), id("Rajiv Chowk"), Criterion::Fastest, ctx));
-        CHECK(!finder.find(-1, id("Rajiv Chowk"), Criterion::Fastest, ctx));
-        CHECK(!finder.find(id("Rajiv Chowk"), 99999, Criterion::FewestStops, ctx));
+        CHECK(finder.find(id("Rajiv Chowk"), id("Rajiv Chowk"), Criterion::Fastest, ctx).empty());
+        CHECK(finder.find(-1, id("Rajiv Chowk"), Criterion::Fastest, ctx).empty());
+        CHECK(finder.find(id("Rajiv Chowk"), 99999, Criterion::FewestStops, ctx).empty());
     });
 
     run("Alternatives are distinct from the fastest route", [&] {
-        auto base = finder.find(id("Kashmere Gate"), id("Hauz Khas"), Criterion::Fastest, ctx);
-        auto alts = finder.alternatives(id("Kashmere Gate"), id("Hauz Khas"), ctx, 2);
+        Route base = finder.find(id("Kashmere Gate"), id("Hauz Khas"), Criterion::Fastest, ctx);
+        std::vector<Route> alts = finder.alternatives(id("Kashmere Gate"), id("Hauz Khas"), ctx, 2);
         CHECK(!alts.empty());
-        for (const Route& r : alts) CHECK(r.signature() != base->signature());
+        for (const Route& r : alts) CHECK(r.signature() != base.signature());
     });
 
     run("Recommender ranks options and explains its choice", [&] {
         Recommender rec(finder);
-        auto result = rec.recommend(id("Dwarka Sector 21"), id("Noida City Centre"), ctx, Preference::Balanced);
+        Recommendation result = rec.recommend(id("Dwarka Sector 21"), id("Noida City Centre"), ctx, Preference::Balanced);
         CHECK(result.options.size() >= 2);
         for (std::size_t i = 1; i < result.options.size(); ++i)
             CHECK(result.options[i - 1].score <= result.options[i].score + 1e-9);
         CHECK(!result.reasons.empty());
-        auto hurry = rec.recommend(id("Dwarka Sector 21"), id("Noida City Centre"), ctx, Preference::Hurry);
+        Recommendation hurry = rec.recommend(id("Dwarka Sector 21"), id("Noida City Centre"), ctx, Preference::Hurry);
         double fastest = hurry.options.front().route.totalMin;
-        for (const auto& o : hurry.options) CHECK(fastest <= o.route.totalMin + 15); // speed dominates
+        for (const ScoredRoute& o : hurry.options) CHECK(fastest <= o.route.totalMin + 15); // speed dominates
     });
 
     run("Journey history persists through save/load", [] {

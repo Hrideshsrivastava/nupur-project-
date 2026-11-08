@@ -19,6 +19,29 @@ double normalise(double value, double lo, double hi) {
     return hi - lo < kEps ? 0.0 : (value - lo) / (hi - lo);
 }
 
+// The metrics used to compare routes (lower is better for all of them).
+double timeOf(const Route& r) { return r.totalMin; }
+double changesOf(const Route& r) { return r.interchanges; }
+double fareOf(const Route& r) { return r.fare; }
+double crowdOf(const Route& r) { return r.avgCrowd; }
+double distOf(const Route& r) { return r.distanceKm; }
+double stopsOf(const Route& r) { return r.stops(); }
+
+// Lowest and highest value of one metric across all routes.
+struct Range {
+    double lo;
+    double hi;
+};
+
+Range rangeOf(const std::vector<Route>& routes, double (*metric)(const Route&)) {
+    Range range{metric(routes.front()), metric(routes.front())};
+    for (const Route& r : routes) {
+        range.lo = std::min(range.lo, metric(r));
+        range.hi = std::max(range.hi, metric(r));
+    }
+    return range;
+}
+
 } // namespace
 
 Recommender::Recommender(const RouteFinder& finder) : finder_(finder) {}
@@ -57,7 +80,8 @@ Recommendation Recommender::recommend(int source, int target, const JourneyConte
                              Criterion::LeastInterchange, Criterion::Cheapest,
                              Criterion::LeastCrowded, Criterion::FewestStops};
     for (Criterion c : all) {
-        if (auto r = finder_.find(source, target, c, ctx)) addCandidate(std::move(*r));
+        Route r = finder_.find(source, target, c, ctx);
+        if (!r.empty()) addCandidate(r);
         rec.statesExplored += finder_.lastExplored();
     }
     for (Route& alt : finder_.alternatives(source, target, ctx, 2)) addCandidate(std::move(alt));
@@ -66,28 +90,12 @@ Recommendation Recommender::recommend(int source, int target, const JourneyConte
     if (candidates.empty()) return rec;
 
     // ── 2. Metric ranges for normalisation + badges ──────────────────────────
-    auto range = [&](auto metric) {
-        double lo = metric(candidates.front()), hi = lo;
-        for (const Route& r : candidates) {
-            lo = std::min(lo, metric(r));
-            hi = std::max(hi, metric(r));
-        }
-        return std::pair<double, double>{lo, hi};
-    };
-    auto timeOf = [](const Route& r) { return r.totalMin; };
-    auto changesOf = [](const Route& r) { return static_cast<double>(r.interchanges); };
-    auto fareOf = [](const Route& r) { return static_cast<double>(r.fare); };
-    auto crowdOf = [](const Route& r) { return r.avgCrowd; };
-    auto distOf = [](const Route& r) { return r.distanceKm; };
-    auto stopsOf = [](const Route& r) { return static_cast<double>(r.stops()); };
-
-    const auto [tLo, tHi] = range(timeOf);
-    const auto [iLo, iHi] = range(changesOf);
-    const auto [fLo, fHi] = range(fareOf);
-    const auto [cLo, cHi] = range(crowdOf);
-    const auto [dLo, dHi] = range(distOf);
-    const auto [sLo, sHi] = range(stopsOf);
-    (void)sHi;
+    const Range timeRange = rangeOf(candidates, timeOf);
+    const Range changeRange = rangeOf(candidates, changesOf);
+    const Range fareRange = rangeOf(candidates, fareOf);
+    const Range crowdRange = rangeOf(candidates, crowdOf);
+    const Range distRange = rangeOf(candidates, distOf);
+    const Range stopRange = rangeOf(candidates, stopsOf);
 
     // ── 3. Score + rank with a min-heap ──────────────────────────────────────
     const Weights w = weightsFor(preference);
@@ -99,19 +107,19 @@ Recommendation Recommender::recommend(int source, int target, const JourneyConte
 
     for (Route& r : candidates) {
         ScoredRoute s;
-        s.score = w.time * normalise(timeOf(r), tLo, tHi) +
-                  w.interchanges * normalise(changesOf(r), iLo, iHi) +
-                  w.fare * normalise(fareOf(r), fLo, fHi) +
-                  w.crowd * normalise(crowdOf(r), cLo, cHi) +
-                  w.distance * normalise(distOf(r), dLo, dHi);
+        s.score = w.time * normalise(timeOf(r), timeRange.lo, timeRange.hi) +
+                  w.interchanges * normalise(changesOf(r), changeRange.lo, changeRange.hi) +
+                  w.fare * normalise(fareOf(r), fareRange.lo, fareRange.hi) +
+                  w.crowd * normalise(crowdOf(r), crowdRange.lo, crowdRange.hi) +
+                  w.distance * normalise(distOf(r), distRange.lo, distRange.hi);
         s.match = static_cast<int>(std::lround(100.0 * (1.0 - s.score)));
 
-        if (timeOf(r) - tLo < 0.05) s.badges.push_back("FASTEST");
-        if (changesOf(r) - iLo < kEps) s.badges.push_back(r.interchanges == 0 ? "DIRECT" : "FEWEST CHANGES");
-        if (fareOf(r) - fLo < kEps) s.badges.push_back("CHEAPEST");
-        if (crowdOf(r) - cLo < 0.05) s.badges.push_back("LEAST CROWDED");
-        if (distOf(r) - dLo < 0.05) s.badges.push_back("SHORTEST");
-        if (stopsOf(r) - sLo < kEps) s.badges.push_back("FEWEST STOPS");
+        if (timeOf(r) - timeRange.lo < 0.05) s.badges.push_back("FASTEST");
+        if (changesOf(r) - changeRange.lo < kEps) s.badges.push_back(r.interchanges == 0 ? "DIRECT" : "FEWEST CHANGES");
+        if (fareOf(r) - fareRange.lo < kEps) s.badges.push_back("CHEAPEST");
+        if (crowdOf(r) - crowdRange.lo < 0.05) s.badges.push_back("LEAST CROWDED");
+        if (distOf(r) - distRange.lo < 0.05) s.badges.push_back("SHORTEST");
+        if (stopsOf(r) - stopRange.lo < kEps) s.badges.push_back("FEWEST STOPS");
 
         s.route = std::move(r);
         heap.push(std::move(s));
@@ -128,7 +136,7 @@ Recommendation Recommender::recommend(int source, int target, const JourneyConte
     if (has("FASTEST")) {
         rec.reasons.push_back({true, "Quickest option: arrive in " + str::formatDuration(b.totalMin)});
     } else {
-        rec.reasons.push_back({true, "Only " + str::formatDuration(b.totalMin - tLo) +
+        rec.reasons.push_back({true, "Only " + str::formatDuration(b.totalMin - timeRange.lo) +
                                          " slower than the fastest route, but a better overall fit"});
     }
     if (b.interchanges == 0)

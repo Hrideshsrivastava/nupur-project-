@@ -8,10 +8,11 @@
 namespace metro {
 
 /// A 24-bit colour. Every metro line owns one; the UI derives gradients from it.
+/// Create one with RGB{red, green, blue}, each 0..255.
 struct RGB {
-    std::uint8_t r = 255;
-    std::uint8_t g = 255;
-    std::uint8_t b = 255;
+    std::uint8_t r;
+    std::uint8_t g;
+    std::uint8_t b;
 };
 
 /// Minutes lost when changing lines (platform walk + average wait for a train).
@@ -36,6 +37,14 @@ enum class Preference { Balanced, Hurry, Budget, Comfort, Simple };
 
 /// Fares and crowd levels differ between working days and Sundays/holidays.
 enum class DayType { Weekday, Sunday };
+
+/// Limit `value` to the range [low, high].
+template <typename T>
+T clampValue(T value, T low, T high) {
+    if (value < low) return low;
+    if (value > high) return high;
+    return value;
+}
 
 inline const char* criterionName(Criterion c) {
     switch (c) {

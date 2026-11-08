@@ -8,7 +8,8 @@
 #include <iomanip>
 #include <sstream>
 
-namespace metro::str {
+namespace metro {
+namespace str {
 
 std::string toLower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(),
@@ -136,4 +137,5 @@ std::string fixed(double value, int precision) {
     return os.str();
 }
 
-} // namespace metro::str
+} // namespace str
+} // namespace metro

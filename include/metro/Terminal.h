@@ -8,7 +8,8 @@
 
 #include <string>
 
-namespace metro::term {
+namespace metro {
+namespace term {
 
 enum class ColorMode { None, Palette256, TrueColor };
 
@@ -76,4 +77,5 @@ private:
 /// Block until one key is pressed (call while a RawMode object is alive).
 int readKey();
 
-} // namespace metro::term
+} // namespace term
+} // namespace metro
