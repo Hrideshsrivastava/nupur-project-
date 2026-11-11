@@ -1,336 +1,153 @@
-<div align="center">
+# Metro Route Navigation System
 
-# 🚇 Metro Route Navigation System
+A simple C++ console program that finds routes on the Delhi NCR Metro.
 
-### An intelligent, multi-criteria journey planner for the Delhi NCR Metro, written in C++14
+**Jaypee Institute of Information Technology, Noida**
+B.Tech Semester V. Data Structures and Algorithms Design Lab (25B17CI578). Project Based Learning.
+Submitted to: Dr. Arpita Jadhav Bhatt
 
-![C++14](https://img.shields.io/badge/C%2B%2B-14-00599C?logo=cplusplus&logoColor=white)
-![CMake](https://img.shields.io/badge/build-CMake%20%7C%20Make-064F8C?logo=cmake&logoColor=white)
-![Platforms](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-6f42c1)
-![Dependencies](https://img.shields.io/badge/dependencies-none-2ea44f)
-![Tests](https://img.shields.io/badge/tests-121%20checks%20passing-2ea44f)
-
-<img src="docs/screenshots/journey.png" alt="Journey planner output" width="760">
-
-</div>
-
----
-
-## 📖 About the project
-
-> **Jaypee Institute of Information Technology, Noida**<br>
-> B.Tech Semester V · *Data Structures and Algorithms Design Lab (25B17CI578)* · Project Based Learning
->
-> **Submitted to:** Dr. Arpita Jadhav Bhatt
->
-> | Name | Enrolment No. |
-> |---|---|
-> | Suchismita Chaterjee | 2401020063 |
-> | Abhimanyu Sharma | 2401020068 |
-> | Nupur Bubna | 2401020073 |
-> | Aarushi Singh | 2401020075 |
-
-Navigating a large metro network is hard when there are many possible routes. The route with the shortest distance is not always the fastest, and a slightly longer route may have fewer interchanges, a lower fare, or less crowding during peak hours.
-
-This project models the **entire Delhi NCR metro (12 lines, 245 stations, 30 interchanges, 341 km of track)** as a weighted graph. It runs several graph algorithms side by side, so it can **compare every sensible route and recommend the best one for you**, and it explains why it chose that route.
-
-Everything runs in the terminal. The interface uses 24-bit colour, gradients, line-coloured route ribbons, live autocomplete, arrow-key menus, crowd heat-bars and charts. The program has **no external dependencies**: it uses only the C++ standard library.
-
----
-
-## ✨ Features
-
-| | Feature | What it does |
-|---|---|---|
-| 🧠 | **Smart recommendation** | Runs 5 × Dijkstra, 1 × BFS and an alternative-route search. It then de-duplicates the routes, scores each one against your priority and ranks them with a min-heap |
-| ⚡ | **Fastest route** | Dijkstra on travel time, including a realistic 6-minute penalty for each line change |
-| 📏 | **Shortest route** | Dijkstra on track distance (km) |
-| 🔁 | **Least-interchange route** | Dijkstra where every line change costs 1000, so fewer changes always win |
-| 💰 | **Cheapest route** | Dijkstra on fare weights. Fares use DMRC-style distance slabs, and the Airport Express has a premium fare |
-| 🧍 | **Least-crowded route** | Dijkstra on travel time × the crowd predicted *at the moment you reach each station* |
-| 🔢 | **Fewest stops** | Breadth-first search, then a small dynamic program that picks the train lines with the fewest changes |
-| 🔀 | **Alternative routes** | An edge-penalty method that finds genuinely different corridors |
-| 📈 | **Peak-hour crowd prediction** | Hourly weekday/Sunday demand profiles × station popularity, shown as heat bars and a 24-hour chart |
-| 🔎 | **Live autocomplete** | A Trie that matches *any word* of a name: `sector 6` → *Noida Sector 62*, `chowk` → *Rajiv Chowk*, … |
-| 🩹 | **Typo tolerance** | Levenshtein edit distance ("did you mean …?") plus a hash-map lookup that ignores case and punctuation |
-| 🗺️ | **Line diagrams** | Every line drawn station by station, with interchanges, termini and distances |
-| 🔥 | **Crowd heatmap** | The busiest stations at any time of day, sorted with merge sort |
-| 🕘 | **Journey history** | The last 10 journeys, kept in a circular FIFO queue and saved to disk |
-| 🎫 | **HTML ticket export** | Save any route as a shareable, dark-themed web page |
-| 📊 | **Network statistics** | Vertices, edges, BFS connectivity check, network diameter and top hubs |
-
-### DSA concepts used (as proposed in the project synopsis)
-
-| Requirement | DSA concept | Where in the code |
-|---|---|---|
-| Metro network | **Graph** | [`MetroGraph`](include/metro/MetroGraph.h) |
-| Network representation | **Adjacency list** | `MetroGraph::adj_` |
-| Fastest / shortest route | **Dijkstra's algorithm** | `RouteFinder::dijkstra` |
-| Station-based traversal | **BFS** | `RouteFinder::fewestStops`, `MetroGraph::bfsHops` |
-| Least-interchange route | **Weighted graph + Dijkstra** on (station, line) states | `RouteFinder::edgeCost` |
-| Route selection | **Priority queue / min-heap**, hand-written | [`MinHeap.h`](include/metro/MinHeap.h) |
-| Station lookup | **Hash map** | `MetroGraph::index_` (`std::unordered_map`) |
-| Station autocomplete | **Trie** | [`Trie`](include/metro/Trie.h) |
-| Route history | **Queue** (circular buffer) | [`BoundedQueue.h`](include/metro/BoundedQueue.h) |
-| Sorting routes/stations | **Merge sort**, hand-written and stable | [`Sorting.h`](include/metro/Sorting.h) |
-| Crowd-based evaluation | **Weighted graph** with time-dependent weights | `CrowdModel` + `RouteFinder` |
-| Alternative comparison | **Priority queue + graph algorithms** | `RouteFinder::alternatives`, `Recommender` |
-| Line assignment for BFS paths | **Dynamic programming** | `RouteFinder::assignLines` |
-| Typo correction | **Edit distance (DP)** | `str::levenshtein` |
-
-📘 **The whole codebase is documented function by function in [`docs/CODE_DOCUMENTATION.md`](docs/CODE_DOCUMENTATION.md).**
-
----
-
-## 🖼️ Screenshots
-
-<table>
-<tr>
-<td width="50%"><b>Main menu + live Trie autocomplete</b><br><img src="docs/screenshots/menu-autocomplete.png"></td>
-<td width="50%"><b>Station explorer + 24-hour crowd forecast</b><br><img src="docs/screenshots/station-explorer.png"></td>
-</tr>
-<tr>
-<td><b>Live crowd heatmap (09:00, weekday)</b><br><img src="docs/screenshots/crowd-heatmap.png"></td>
-<td><b>Network statistics & fare chart</b><br><img src="docs/screenshots/network-stats.png"></td>
-</tr>
-<tr>
-<td><b>Line diagram (Blue Line)</b><br><img src="docs/screenshots/line-diagram.png"></td>
-<td><b>Exported HTML journey ticket</b><br><img src="docs/screenshots/html-ticket.png"></td>
-</tr>
-</table>
-
----
-
-## 🚀 Running it on your computer
-
-You need **a C++14 compiler** (GCC 5+, Clang 3.4+ or Visual Studio 2017+) and, optionally, **CMake ≥ 3.14**. Nothing else needs to be installed.
-
-### 1. Get the code
-
-```bash
-git clone https://github.com/hrideshsrivastava/nupur-project-.git
-cd nupur-project-
-```
-
-(Or download the ZIP from GitHub and extract it.)
-
-### 2. Build and run on your platform
-
-<details open>
-<summary><b>🐧 Linux (Ubuntu / Debian / Fedora / Arch …)</b></summary>
-
-Install a compiler and CMake if you do not have them:
-
-```bash
-# Ubuntu / Debian
-sudo apt update && sudo apt install -y g++ cmake make
-# Fedora
-sudo dnf install -y gcc-c++ cmake make
-# Arch
-sudo pacman -S --needed gcc cmake make
-```
-
-Build with **CMake** (recommended):
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-./build/metro_navigator
-```
-
-…or with the plain **Makefile**:
-
-```bash
-make            # builds build/metro_navigator and build/metro_tests
-make run        # builds and starts the app
-```
-
-</details>
-
-<details>
-<summary><b>🍎 macOS</b></summary>
-
-Install Apple's command-line tools (they include `clang++` and `make`), plus CMake through Homebrew:
-
-```bash
-xcode-select --install
-brew install cmake          # optional; you can use `make` instead
-```
-
-Then build and run:
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-./build/metro_navigator
-```
-
-> 💡 The built-in **Terminal.app** only shows 256 colours, and the app detects this automatically. For the full 24-bit gradients, use **iTerm2**, **WezTerm**, **Kitty**, **Alacritty** or the **VS Code** terminal.
-
-</details>
-
-<details>
-<summary><b>🪟 Windows 10 / 11</b></summary>
-
-Use **Windows Terminal** (pre-installed on Windows 11; on Windows 10, get it from the Microsoft Store). It shows the colours and Unicode characters correctly.
-
-**Option A: Visual Studio 2019/2022** (install the *Desktop development with C++* workload, which includes CMake). Open a *Developer PowerShell for VS* and run:
-
-```powershell
-cmake -S . -B build
-cmake --build build --config Release
-.\build\Release\metro_navigator.exe
-```
-
-> You can also choose **File → Open → Folder…** in Visual Studio, select the project folder, and press **▶ metro_navigator.exe**.
-
-**Option B: MSYS2 / MinGW-w64.** Install [MSYS2](https://www.msys2.org/), open the *UCRT64* shell and run:
-
-```bash
-pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake make
-cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-./build/metro_navigator.exe
-```
-
-**Option C: just g++ (no CMake)**
-
-```powershell
-g++ -std=c++14 -O2 -Iinclude src/*.cpp -o metro_navigator.exe
-.\metro_navigator.exe
-```
-
-The program switches the console to UTF-8 and turns on ANSI colour support by itself.
-
-</details>
-
-<details>
-<summary><b>🧩 VS Code / CLion / Code::Blocks</b></summary>
-
-* **VS Code:** install the *C/C++* and *CMake Tools* extensions, open the folder, choose a kit, then click **Build** and **▶ Run** in the status bar. Run the app in the integrated terminal.
-* **CLion:** open the folder; it detects `CMakeLists.txt` automatically. Select the `metro_navigator` configuration and press Run. *Tip:* enable **Run → Edit Configurations → Emulate terminal in the output console** so the arrow-key menus work.
-* **Code::Blocks:** create an empty project, add every file from `src/`, and add `include/` under *Project → Build options → Search directories*. Under *Compiler settings → Compiler flags*, tick **"Have g++ follow the C++14 ISO C++ language standard [-std=c++14]"**.
-* **Dev-C++:** create an empty project, add every file from `src/`, add `include/` under *Project Options → Directories → Include Directories*, and add `-std=c++14` under *Tools → Compiler Options → "Add the following commands when calling the compiler"*.
-
-</details>
-
-### 3. Run the tests (optional)
-
-```bash
-ctest --test-dir build --output-on-failure   # with CMake
-# or
-./build/metro_tests                           # direct
-make test                                     # with the Makefile
-```
-
-The suite checks every data structure and algorithm, including that each criterion is optimal for its own metric, plus the edge cases and history persistence. It runs **121 checks**.
-
----
-
-## 🎮 How to use it
-
-### Interactive mode
-
-```bash
-./build/metro_navigator
-```
-
-| Key | Action |
+| Name | Enrolment No. |
 |---|---|
-| `↑` `↓` (or `j` `k`) | Move through menus and suggestions |
-| `Enter` | Select / confirm |
-| `1`–`9` | Jump straight to a menu item |
-| `Tab` | Autocomplete the highlighted station |
-| `Esc` / `q` | Go back / cancel |
+| Suchismita Chaterjee | 2401020063 |
+| Abhimanyu Sharma | 2401020068 |
+| Nupur Bubna | 2401020073 |
+| Aarushi Singh | 2401020075 |
 
-A typical session:
+---
 
-1. **Plan a Journey**
-2. Type `rajiv` and press `Enter`. The app suggests *Rajiv Chowk* as you type.
-3. Type `sector 62` and press `Enter`.
-4. Choose a departure time, for example **Morning peak**.
-5. Choose what matters most: **Balanced**, **In a hurry**, **On a budget**, **Comfort first** or **Keep it simple**.
-6. The app shows the recommended route card, the reasons for the recommendation, a station-by-station timeline with crowd predictions, and a comparison table of every option.
-7. Optionally view the other options or **export an HTML ticket**.
+## What it does
 
-### One-shot command-line mode
+The metro network (11 lines, 224 stations) is stored as a graph. You enter a source station, a destination station and a departure hour, and the program finds routes by different criteria:
 
-```bash
-./build/metro_navigator --from "Rajiv Chowk" --to "Noida Sector 62" --time 09:00
-./build/metro_navigator --from kashmere --to "pari chowk" --time 18:00 --pref comfort
-./build/metro_navigator --from "dwarka sec 21" --to "botanical" --sunday --pref budget
-```
+- **Fastest**: least travel time (Dijkstra)
+- **Shortest**: least distance (Dijkstra)
+- **Least Changes**: fewest line changes (Dijkstra)
+- **Cheapest**: lowest fare (Dijkstra)
+- **Least Crowded**: avoids crowded stations at that hour (Dijkstra)
+- **Fewest Stops**: fewest stations on the way (BFS)
 
-| Option | Meaning |
+It compares all these routes, recommends the best one, and prints step-by-step directions.
+
+It can also search stations by part of their name (Trie), show station details with the expected crowd for each hour of the day, list the metro lines, show the most crowded stations at a given hour, and keep a history of your last 10 journeys.
+
+## DSA concepts used
+
+| Requirement | DSA concept |
 |---|---|
-| `--from <name>` / `--to <name>` | Stations. Partial names and small typos are accepted |
-| `--time HH:MM` | Departure time (default: now) |
-| `--pref <p>` | `balanced`, `fast`, `budget`, `comfort`, `simple` |
-| `--sunday` | Sunday/holiday fares and crowd profile |
-| `--no-color` / `--truecolor` | Force plain output / force 24-bit colour |
-| `--no-anim` | Disable animations |
-| `--history <file>` | Where journey history is stored (default `metro_history.txt`) |
-| `-h`, `--help` | Show help |
+| Metro network | Graph |
+| Network representation | Adjacency list |
+| Fastest / shortest / cheapest / least changes / least crowded route | Dijkstra's algorithm |
+| Route selection in Dijkstra | Priority queue (min-heap) |
+| Fewest stops route | BFS |
+| Station lookup by name | Hash map (`unordered_map`) |
+| Station search / autocomplete | Trie |
+| Journey history | Queue |
+| Ranking routes and crowded stations | Sorting |
 
 ---
 
-## 🗂️ Project structure
+## How to run it
+
+The whole program is one file, `metro.cpp`. It uses only the standard C++ library and works with any C++11 (or newer) compiler.
+
+### Windows (MinGW)
+
+1. Install MinGW if you don't have it. Any of these works:
+   - **MSYS2** (https://www.msys2.org). In the *MSYS2 UCRT64* window, run `pacman -S mingw-w64-ucrt-x86_64-gcc`.
+   - **Code::Blocks**: download the version that comes "with MinGW".
+   - **Dev-C++**: includes MinGW.
+2. Open **Command Prompt** or **PowerShell** in the project folder.
+3. Compile and run:
 
 ```
-nupur-project-/
-├── CMakeLists.txt            # CMake build (app + tests)
-├── Makefile                  # alternative build without CMake
-├── include/metro/            # headers — one per component
-│   ├── Types.h               #   enums, constants, RGB
-│   ├── Station.h             #   Station / Edge / MetroLine structs
-│   ├── MetroGraph.h          #   graph: adjacency list + hash-map index
-│   ├── MetroData.h           #   built-in Delhi NCR network
-│   ├── MinHeap.h             #   hand-written binary heap (priority queue)
-│   ├── BoundedQueue.h        #   circular FIFO queue
-│   ├── Sorting.h             #   stable merge sort
-│   ├── Trie.h                #   autocomplete prefix tree
-│   ├── StringUtil.h          #   normalisation, Levenshtein, time formatting
-│   ├── CrowdModel.h          #   peak-hour crowd prediction
-│   ├── FareCalculator.h      #   slab-based fares
-│   ├── Route.h               #   computed journey + segments
-│   ├── RouteFinder.h         #   Dijkstra, BFS, alternatives
-│   ├── Recommender.h         #   scoring, ranking, explanations
-│   ├── JourneyHistory.h      #   persisted history (queue)
-│   ├── Terminal.h            #   colours, raw keys, cross-platform console
-│   ├── UI.h                  #   panels, tables, meters, menus
-│   ├── Renderer.h            #   all screens and visualisations
-│   ├── Exporter.h            #   HTML ticket export
-│   └── App.h                 #   the interactive application
-├── src/                      # implementations (*.cpp) + main.cpp
-├── tests/test_main.cpp       # dependency-free test suite
-└── docs/
-    ├── CODE_DOCUMENTATION.md # function-by-function documentation
-    └── screenshots/
+g++ -std=c++11 -O2 -o metro.exe metro.cpp
+metro.exe
+```
+
+> If `g++` is "not recognized", add MinGW's `bin` folder (for example `C:\msys64\ucrt64\bin`) to your PATH, or run the command from the MSYS2 UCRT64 window.
+
+**Using an IDE instead:**
+
+- **Code::Blocks**: *File, New, Empty file*. Paste or open `metro.cpp`, then press **F9** (Build and run).
+- **Dev-C++**: *File, Open*, choose `metro.cpp`, then press **F11** (Compile and run).
+  Older Dev-C++ (5.11) uses C++98 by default and shows errors. To fix this, go to *Tools, Compiler Options*, tick *"Add the following commands when calling the compiler"*, type `-std=c++11` and press OK. You only need to do this once.
+
+### Linux
+
+```
+sudo apt install g++        # Ubuntu/Debian, if g++ is not installed
+g++ -std=c++11 -O2 -o metro metro.cpp
+./metro
+```
+
+### macOS
+
+```
+xcode-select --install      # installs the compiler, if needed
+g++ -std=c++11 -O2 -o metro metro.cpp
+./metro
 ```
 
 ---
 
-## 🛠️ Troubleshooting
+## Example session
 
-| Problem | Fix |
+```
+Metro Route Navigation System - Delhi NCR
+11 lines, 224 stations loaded.
+
+----------------- MENU -----------------
+1. Plan a journey (compare all routes)
+2. Find a route by one criterion
+3. Search stations
+4. Station details and crowd
+5. Show metro lines
+6. Most crowded stations at an hour
+7. Journey history
+0. Exit
+Enter choice: 1
+
+From station: dwarka sector 21
+  Selected: Dwarka Sector 21
+To station: botanical
+  Selected: Botanical Garden
+Departure hour (0-23, e.g. 9 for 9 AM): 9
+
+Found 2 different route(s):
+  #  Time        Km     Stops  Changes  Fare    Crowd  Found by
+  1  1 h 14 min  38.7   19     2        Rs.103  60%    Fastest, Shortest, Least Crowded, Fewest Stops
+  2  1 h 42 min  43.5   41     0        Rs.64   55%    Least Changes, Cheapest
+
+Recommended route (#1, best balance of time, changes, fare and crowd):
+  Dwarka Sector 21 -> Botanical Garden
+  Board Airport Express at Dwarka Sector 21 (towards New Delhi)
+      IGI Airport T3
+      ...
+  Get off at New Delhi and change line.
+  Board Yellow Line at New Delhi (towards Millennium City Centre Gurugram)
+      Rajiv Chowk
+  ...
+  Time: 1 h 14 min | Distance: 38.7 km | Stops: 19 | Changes: 2 | Fare: Rs. 103 | Crowd: 60% (High)
+```
+
+**Tips**
+
+- You don't need to type full station names. Type part of a name, like `rajiv` or `sector 62`. If several stations match, the program lists them and you pick a number.
+- Press **Enter** on an empty station prompt to cancel and go back to the menu.
+- Everything stays on screen, so you can scroll up to see earlier results.
+
+---
+
+## Files
+
+| File | Contents |
 |---|---|
-| Boxes or question marks instead of lines and blocks | Use a modern terminal (Windows Terminal, iTerm2, GNOME Terminal …) with a font such as *Cascadia Mono*, *JetBrains Mono* or *DejaVu Sans Mono*. On the old Windows console, run `chcp 65001` first. |
-| Colours look wrong or washed out | Your terminal may not report 24-bit colour support. Try `--truecolor`. If the colours get worse, your terminal only supports 256 colours, which the app uses by default. |
-| Arrow keys do nothing in my IDE | Some IDE "run" consoles are not real terminals. Run the program from a terminal, or enable terminal emulation (CLion). The app falls back to typed numeric menus when it is not attached to a terminal. |
-| `cmake: command not found` | Install CMake, or use `make` / the single `g++` command shown above. |
-| `error: ‘make_unique’ is not a member of ‘std’` (or similar errors) | Your compiler is using an older C++ standard. Pass `-std=c++14` (see the Code::Blocks / Dev-C++ steps above). Very old compilers such as the GCC 4.9 bundled with Dev-C++ 5.11 have not been tested; if the build still fails there, install a newer compiler (MSYS2 or Visual Studio). |
-| I want to reset my history | Delete `metro_history.txt`, or use *Journey History → Clear history*. |
+| `metro.cpp` | The complete program |
+| `docs/CODE_DOCUMENTATION.md` | Explanation of the code, function by function |
+| `README.md` | This file |
 
----
+## Notes on the data
 
-## 📌 Notes on the data
+The station order and the interchange stations follow the real Delhi Metro. The distances between stations, train speeds, fares and crowd levels are approximations for this project, not official DMRC data.
 
-The station lists and line order follow the real Delhi Metro network, with interchanges and skywalk links (*Noida Sector 52 ⇄ 51*, *Dhaula Kuan ⇄ Durgabai Deshmukh South Campus*, *Punjabi Bagh ⇄ Punjabi Bagh West*). The distances between stations, line speeds, fares and crowd profiles are **realistic approximations for educational purposes**. They are not official DMRC data. The whole network lives in one file, [`src/MetroData.cpp`](src/MetroData.cpp), so it is easy to extend or to swap for another city.
-
-<div align="center">
-
----
-
-Made with ❤️ and lots of `std::vector` for the DSA Lab at **JIIT Noida**
-
-</div>
+The Aqua Line is not included, because it only connects to the rest of the network through a walkway between two differently named stations.
